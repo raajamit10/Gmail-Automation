@@ -1,16 +1,29 @@
 from datetime import datetime
-from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
 from app.models import Message, Task, MessageCategory
 from app.services.ai_service import process_message
 
 
-def process_message_task(message_id: int, db: Session):
+def process_message_task(message_id: int):
+    """
+    Process a message using a fresh database session.
+    """
+
+    db = SessionLocal()
+
     try:
-        message = db.query(Message).filter(Message.id == message_id).first()
+        message = (
+            db.query(Message)
+            .filter(Message.id == message_id)
+            .first()
+        )
 
         if not message:
+            print(f"[background] Message {message_id} not found")
             return
+
+        print(f"[background] Processing message {message_id}...")
 
         result = process_message(
             message.sender,
@@ -18,7 +31,13 @@ def process_message_task(message_id: int, db: Session):
             message.body,
         )
 
-        message.category = MessageCategory(result.get("category", "fyi"))
+        category = result.get("category", "fyi")
+
+        try:
+            message.category = MessageCategory(category)
+        except ValueError:
+            message.category = MessageCategory.FYI
+
         message.summary = result.get("summary")
         message.processed = True
 
@@ -32,13 +51,18 @@ def process_message_task(message_id: int, db: Session):
 
             if action.get("due_date"):
                 try:
-                    due_date = datetime.fromisoformat(action["due_date"])
-                except ValueError:
-                    pass
+                    due_date = datetime.fromisoformat(
+                        action["due_date"]
+                    )
+                except (ValueError, TypeError):
+                    due_date = None
 
             task = Task(
                 message_id=message.id,
-                title=action.get("title") or f"Follow up: {message.subject or message.sender}",
+                title=(
+                    action.get("title")
+                    or f"Follow up: {message.subject or message.sender}"
+                ),
                 description=message.summary,
                 due_date=due_date,
             )
@@ -47,9 +71,11 @@ def process_message_task(message_id: int, db: Session):
 
         db.commit()
 
+        print(f"[background] Message {message_id} processed successfully")
+
     except Exception as e:
-        print("Background task failed:", e)
         db.rollback()
+        print(f"[background] Error processing message {message_id}: {e}")
 
     finally:
         db.close()
