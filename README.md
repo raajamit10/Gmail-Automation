@@ -1,4 +1,4 @@
-# ✉️ MailMind
+## ✉️ MailMind
 
 ### AI-Powered Gmail Inbox Automator
 
