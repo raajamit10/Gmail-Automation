@@ -4,3 +4,5 @@ __pycache__/
 .env
 *.db
 frontend/node_modules/
+credentials.json
+token.json

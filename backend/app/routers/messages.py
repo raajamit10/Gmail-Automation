@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import Message
 from app.schemas import MessageCreate, MessageOut, DraftApprove
 from app.services.background import process_message_task
+from app.services.gmail_ingest import fetch_and_store_gmail_messages
 
 
 router = APIRouter(
@@ -128,31 +129,56 @@ def process_pending_messages(
     """
     Process all messages that have not been processed yet.
 
-    This is useful for messages that were created before
-    Gemini AI processing was working.
+    Useful for messages that were created before Gemini
+    AI processing was working.
     """
 
-    messages = (
+    pending_messages = (
         db.query(Message)
         .filter(Message.processed == False)
         .all()
     )
 
-    if not messages:
+    if not pending_messages:
         return {
             "message": "No pending messages.",
             "pending": 0,
         }
 
-    for message in messages:
+    for message in pending_messages:
         background_tasks.add_task(
             process_message_task,
             message.id,
-            db,
         )
 
     return {
         "message": "Pending messages queued for processing.",
-        "pending": len(messages),
-        "message_ids": [message.id for message in messages],
+        "pending": len(pending_messages),
+        "message_ids": [
+            message.id
+            for message in pending_messages
+        ],
     }
+
+
+@router.post("/sync-gmail")
+def sync_gmail(
+    background_tasks: BackgroundTasks,
+):
+    """
+    Fetch new Gmail messages, save them to the database,
+    then process newly imported messages with Gemini
+    in the background.
+    """
+
+    result = fetch_and_store_gmail_messages(
+        max_results=10
+    )
+
+    for message_id in result.get("message_ids", []):
+        background_tasks.add_task(
+            process_message_task,
+            message_id,
+        )
+
+    return result

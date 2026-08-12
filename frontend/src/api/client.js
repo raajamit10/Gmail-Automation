@@ -30,13 +30,17 @@ export const approveDraft = async (messageId, draft_reply) => {
   const { data } = await api.post(
     `/messages/${messageId}/approve-draft`,
     { draft_reply }
-  )
-
-  return data
-}
+  );
+  return data;
+};
 
 export const fetchDigest = async () => {
   const { data } = await api.get("/digest");
+  return data;
+};
+
+export const syncGmail = async () => {
+  const { data } = await api.post("/messages/sync-gmail");
   return data;
 };
 
